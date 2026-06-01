@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/netip"
+	"os"
+	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -44,6 +45,12 @@ func updateRecords(client *route53.Client, zone types.HostedZone, ip netip.Addr)
 }
 
 func main() {
+	if len(os.Args) < 2 {
+		log.Fatalf("usage: %s <zone>...", os.Args[0])
+	}
+	// NOTE: Must end in trailing dot i.e. mydomain.com.
+	zones := os.Args[1:]
+
 	publicIP := fetchIP()
 	log.Printf("Public IP: %s", publicIP)
 
@@ -53,10 +60,14 @@ func main() {
 	}
 	client := route53.NewFromConfig(cfg)
 
-	hostedZones := fetchHostedZones(client)
-	// TODO: args with a list of hostedZones to update so we don't just update all of them
-	for _, zone := range hostedZones {
-		// TODO: something with the response
-		updateRecords(client, zone, publicIP)
+	for _, zone := range fetchHostedZones(client) {
+		// ignore hostedzones on the acct that weren't passed as args
+		if !slices.Contains(zones, *zone.Name) {
+			continue
+		}
+		if err := updateRecords(client, zone, publicIP); err != nil {
+			log.Fatalf("Failed to update %s: %v", *zone.Name, err)
+		}
+		log.Printf("Upserted %s to %s", *zone.Name, publicIP)
 	}
 }
