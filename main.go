@@ -15,17 +15,13 @@ import (
 func fetchHostedZones(client *route53.Client) []types.HostedZone {
 	res, err := client.ListHostedZonesByName(context.TODO(), &route53.ListHostedZonesByNameInput{})
 	if err != nil {
-		return []types.HostedZone{}
+		log.Fatalf("Failed to list hosted zones: %v", err)
 	}
 	return res.HostedZones
 }
 
-func updateRecords(
-	client *route53.Client,
-	zone types.HostedZone,
-	ip netip.Addr,
-) (*route53.ChangeResourceRecordSetsOutput, error) {
-	request := &route53.ChangeResourceRecordSetsInput{
+func updateRecords(client *route53.Client, zone types.HostedZone, ip netip.Addr) error {
+	_, err := client.ChangeResourceRecordSets(context.TODO(), &route53.ChangeResourceRecordSetsInput{
 		HostedZoneId: zone.Id,
 		ChangeBatch: &types.ChangeBatch{
 			Changes: []types.Change{
@@ -43,17 +39,14 @@ func updateRecords(
 			},
 			Comment: aws.String("Auto updated from reverse DNS bot"),
 		},
-	}
-	return client.ChangeResourceRecordSets(context.TODO(), request)
+	})
+	return err
 }
 
 func main() {
 	publicIP := fetchIP()
-	fmt.Println("Public IP: ", publicIP)
+	log.Printf("Public IP: %s", publicIP)
 
-	// Using the SDK's default configuration, load additional config
-	// and credentials values from the environment variables, shared
-	// credentials, and shared configuration files
 	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion("us-east-1"))
 	if err != nil {
 		log.Fatalf("Failed to load AWS SDK config: %v", err)
